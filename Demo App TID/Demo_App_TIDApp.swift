@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct Demo_App_TIDApp: App {
+    @StateObject var manager = HealthManager()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            HealthTidTabView()
+                .environmentObject(manager)
         }
     }
 }
+
