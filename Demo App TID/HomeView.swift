@@ -12,14 +12,24 @@ struct HomeView: View {
     var body: some View {
         VStack{
             LazyVGrid(columns: Array(repeating: GridItem(spacing: 20), count: 2)){
-                ActivityCard()
-                ActivityCard()
+                ForEach(manager.activities.sorted(by:{ $0.value.id < $1.value.id}), id: \.key) {item in
+                    ActivityCard(activity: item.value)
+                    
+                }
             }
             .padding(.horizontal)
+        }
+        .onAppear{
+            manager.fetchTodaySteps()
+            manager.fetchTodayCalories()
         }
     }
 }
 
-#Preview {
-    HomeView()
+
+struct homeView_previews: PreviewProvider {
+    static var previews: some View {
+        HomeView()
+            .environmentObject(HealthManager())
+    }
 }
