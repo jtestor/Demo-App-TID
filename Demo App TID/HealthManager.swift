@@ -17,17 +17,31 @@ extension Date{
 class HealthManager: ObservableObject {
     
     let healthStore = HKHealthStore()
-    @Published var activities: [String : Activity] = [:]
+        @Published var activities: [String : Activity] = [:]
+        @Published var isAuthorized: Bool = false
+
+
     
     init (){
-        let steps = HKQuantityType(.stepCount)
-        let calories = HKQuantityType(.activeEnergyBurned)
-        
-        let healthTypes: Set = [steps, calories]
+        let writeTypes: Set = [
+                HKObjectType.quantityType(forIdentifier: .bodyMass)!
+            ]
+
+           
+            let readTypes: Set = [
+                HKObjectType.quantityType(forIdentifier: .stepCount)!,
+                HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+                HKObjectType.quantityType(forIdentifier: .bodyMass)!
+            ]
+
         
         Task {
+            
             do {
-                try await healthStore.requestAuthorization(toShare: [], read: healthTypes)
+                try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
+                DispatchQueue.main.async {
+                    self.isAuthorized = true
+                }
             } catch {
                 print("error fetching health data")
             }
@@ -35,7 +49,7 @@ class HealthManager: ObservableObject {
     }
     func fetchTodaySteps(){
         let steps = HKQuantityType(.stepCount)
-        let calories = HKQuantityType(.activeEnergyBurned)
+        _ = HKQuantityType(.activeEnergyBurned)
         let predicate = HKQuery.predicateForSamples(withStart: .startOfDay, end: Date())
         let query = HKStatisticsQuery(quantityType: steps , quantitySamplePredicate: predicate){ _, result, error in
             guard let quantity = result?.sumQuantity(), error == nil else{
@@ -73,6 +87,42 @@ class HealthManager: ObservableObject {
             print(caloriesBurned.formattedString())
             
         }
+        healthStore.execute(query)
+    }
+    func saveWeight(valueKg:Double, date: Date){
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        let type =  HKQuantityType.quantityType(forIdentifier: .bodyMass)!
+        let quantity = HKQuantity(unit: HKUnit.gramUnit(with: .kilo), doubleValue: valueKg)
+        let sample = HKQuantitySample(type: type, quantity: quantity, start: date, end: date)
+        
+        
+        healthStore.save(sample) {success, error in
+            if success{
+                print("weight saved in healthkit")
+            } else {
+                print("error saving todays weight \(String(describing: error))")
+            }
+        }
+        
+    }
+    func fetchTodayWeight() {
+        let weightType = HKQuantityType(.bodyMass)
+        let predicate = HKQuery.predicateForSamples(withStart: .startOfDay, end: Date())
+
+        let query = HKSampleQuery(sampleType: weightType, predicate: predicate, limit: 1, sortDescriptors: [.init(key: HKSampleSortIdentifierStartDate, ascending: false)]) { _, results, error in
+            guard let sample = results?.first as? HKQuantitySample, error == nil else {
+                print(" cannot fetch todays weight")
+                return
+            }
+
+            let value = sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            let activity = Activity(id: 2, title: "Today Weight", subtitle: "Goal: 70kg", image: "scalemass", amount: "\(value.formattedString())")
+
+            DispatchQueue.main.async {
+                self.activities["todayWeight"] = activity
+            }
+        }
+
         healthStore.execute(query)
     }
 }

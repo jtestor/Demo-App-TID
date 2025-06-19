@@ -1,21 +1,29 @@
-//
-//  Demo_App_TIDApp.swift
-//  Demo App TID
-//
-//  Created by Miguel Testor on 19-05-25.
-//
-
 import SwiftUI
 
 @main
 struct Demo_App_TIDApp: App {
-    @StateObject var manager = HealthManager()
-    
+
+    private let healthManager = HealthManager()
+    private let iotClient: IoTClient
+
+    init() {
+        print("🚀 App inicializada (antes de KeyManager)")
+        KeyManager.generateKeyPairIfNeeded()
+
+        iotClient = IoTClient(manager: healthManager)
+        print("⚙️  IoTClient creado")
+        if let pem = KeyManager.publicKeyPEM() {
+            print("----- CLAVE PÚBLICA PEM -----\n\(pem)")
+        }
+        let base = "https://tid.ngrok.app"
+        print("🔗  Iniciando handshake a \(base)")
+        iotClient.startHandshake(baseURL: base)
+    }
+
     var body: some Scene {
         WindowGroup {
-            HealthTidTabView()
-                .environmentObject(manager)
+            HomeView()
+                .environmentObject(healthManager)
         }
     }
 }
-

@@ -22,6 +22,14 @@ struct HomeView: View {
         .onAppear{
             manager.fetchTodaySteps()
             manager.fetchTodayCalories()
+            manager.fetchTodayWeight()
+        }
+        .onReceive(manager.$isAuthorized){ granted in
+                if granted {
+                    manager.saveWeight(valueKg: 72.5, date: Date())
+                    manager.fetchTodayWeight()
+            }
+            
         }
     }
 }
@@ -32,4 +40,5 @@ struct homeView_previews: PreviewProvider {
         HomeView()
             .environmentObject(HealthManager())
     }
+    
 }
