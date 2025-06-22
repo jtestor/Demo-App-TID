@@ -1,175 +1,127 @@
 import Foundation
-import Security
-import CryptoKit
+import CommonCrypto                     // ⇦ CBC
+import CryptoKit                        // ⇦ para la clave AES
 
-
+//──────────────────────── IoTClient ───────────────────────
 final class IoTClient {
-
-    private weak var healthManager: HealthManager?
-
-    init(manager: HealthManager) {
-        self.healthManager = manager
-    }
+    private weak var manager: HealthManager?
+    private let handshakeURL = URL(string: "https://tid.ngrok.app/handshake")!
+    private let telemetryURL = URL(string: "https://tid.ngrok.app/telemetria")!
     
-
-    // Paso 1 – clave AES
-    func fetchEncryptedAESKey(from urlString: String,
-                              completion: @escaping (Bool) -> Void) {
-
-        guard
-            let url = URL(string: urlString),
-            let pemKey = KeyManager.publicKeyPEM(),
-            let jsonBody = try? JSONEncoder().encode(["public_key": pemKey])
-        else {
-            print("❌ Error al preparar clave pública PEM para handshake")
-            completion(false)
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = jsonBody
+    init(manager: HealthManager) { self.manager = manager }
+    
+    // MARK: – 1. Handshake  (POST clave pública)  ──────────
+    func startHandshake() {
+        guard let pem = KeyManager.publicKeyPEM_PKIX() else { return }
         
-        print("➡️  URL:", url)
-        print("➡️  Método:", request.httpMethod ?? "")
-        if let body = request.httpBody,
-           let bodyStr = String(data: body, encoding: .utf8) {
-            print("➡️  Body:\n", bodyStr)
-        }
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let http = response as? HTTPURLResponse {
-                print("🌐 HTTP status:", http.statusCode)
-            }
-            if let error = error {
-                print(" Error HTTP AES:", error)
-                completion(false)
-                return
-            }
-
-            guard
-                let data = data,
-                let rawJSON = String(data: data, encoding: .utf8)
-            else {
-                print(" Respuesta vacía / binaria (AES)")
-                completion(false)
-                return
-            }
-
-            print("🔸 RAW /handshake:", rawJSON)
-
-            guard
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-                let encryptedB64 = json["clave_aes"],
-                let encryptedKey = Data(base64Encoded: encryptedB64)
-            else {
-                print("❌ JSON /handshake sin 'clave_aes'")
-                completion(false)
-                return
-            }
-
-            print("🔐 Recibida clave AES cifrada (\(encryptedKey.count) bytes)")
-
-            guard let aesKeyData = KeyManager.decryptAESKey(encryptedKey) else {
-                print("❌ RSA decrypt falló (clave AES)")
-                completion(false)
-                return
-            }
-
-            AESKeyManager.shared.setKey(aesKeyData)
-            print("✅ AES Key almacenada (\(aesKeyData.count) bytes)")
-            completion(true)
+        var req = URLRequest(url: handshakeURL)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONEncoder().encode(["public_key": pem])
+        
+        print("➡️  POST /handshake bytes=\(req.httpBody?.count ?? 0)")
+        
+        URLSession.shared.dataTask(with: req) { data, resp, err in
+            if let err = err { print("❌ NET:", err); return }
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
+            self.handleHandshake(data)
         }.resume()
-        print("🟢 dataTask.resume() ejecutado")
     }
-
     
-    // MARK: -  Handshake publico
-    func startHandshake(baseURL: String) {
-        fetchEncryptedAESKey(from: "\(baseURL)/handshake") { [weak self] ok in
-            guard ok else { print("❌ Handshake fallido"); return }
-            self?.fetchEncryptedPayload(from: "\(baseURL)/telemetria")
-        }
+    private func handleHandshake(_ data: Data?) {
+        guard
+            let data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String:String],
+            let b64  = json["clave_aes"],
+            let enc  = Data(base64Encoded: b64),
+            let aes  = KeyManager.decryptAESKey(enc)
+        else { print("❌ body handshake"); return }
+        
+        AESKeyManager.shared.setKey(aes)
+        print("✅ AES key OK (\(aes.count) bytes)")
+        fetchTelemetry()
     }
-    // Paso 2 – payload cifrado
-    func fetchEncryptedPayload(from urlString: String) {
-
-        guard let url = URL(string: urlString) else {
-            print("❌ URL inválida (payload): \(urlString)")
-            return
-        }
-
-        URLSession.shared.dataTask(with: url) { data, _, error in
-            if let error = error {
-                print("❌ Error HTTP payload:", error)
-                return
+    
+    // MARK: – 2. GET /telemetria  ──────────────────────────
+    private func fetchTelemetry() {
+        URLSession.shared.dataTask(with: telemetryURL) { data, resp, err in
+            if let err = err { print("❌ NET telemetry:", err); return }
+            guard (resp as? HTTPURLResponse)?.statusCode == 200, let data else { return }
+            
+            // cuerpo crudo para inspección
+            if let raw = String(data: data, encoding: .utf8) {
+                print("🔸 RAW /telemetria:", raw)
             }
-
+            
             guard
-                let data = data,
-                let rawJSON = String(data: data, encoding: .utf8) else {
-                print("❌ Respuesta vacía / binaria (payload)")
-                return
+                let json  = try? JSONSerialization.jsonObject(with: data) as? [String:String],
+                let b64   = json["data"],
+                let cipher = Data(base64Encoded: b64)
+            else { print("❌ JSON sin 'data'"); return }
+            
+            print("📦 bytes cifrados:", cipher.count)
+            
+            // --- CBC decrypt (IV + ciphertext) ------------
+            guard let clear = AESKeyManager.shared.decryptCBC(cipher) else {
+                print("❌ AES-CBC decrypt falló"); return
             }
-
-            print("🔸 RAW /telemetria:", rawJSON)
-
+            
             guard
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-                let payloadB64 = json["data"],
-                let payload   = Data(base64Encoded: payloadB64)
-            else {
-                print("❌ JSON /telemetria sin 'data'")
-                return
-            }
-
-            print("📦 Payload cifrado recibido (\(payload.count) bytes)")
-
-            guard let clear = AESKeyManager.shared.decrypt(payload) else {
-                print("❌ Fallo AES-GCM decrypt (payload)")
-                return
-            }
-
-            guard
-                let obj   = try? JSONSerialization.jsonObject(with: clear) as? [String: Any],
-                let type  = obj["type"]  as? String,
-                let value = obj["value"] as? Double
-            else {
-                print("❌ JSON desencriptado inválido")
-                return
-            }
-
-            print("✅ Payload desencriptado:", obj)
-
-            DispatchQueue.main.async {
-                if type == "weight" {
-                    self.healthManager?.saveWeight(valueKg: value, date: Date())
-                } else {
-                    print("ℹ️ Tipo '\(type)' no soportado aún")
+                let obj    = try? JSONSerialization.jsonObject(with: clear) as? [String:Any],
+                let type   = obj["type"]  as? String,
+                let value  = obj["value"] as? Double
+            else { print("❌ JSON claro inválido"); return }
+            
+            print("✅ Telemetría:", obj)
+            
+            if type == "weight" {
+                DispatchQueue.main.async {
+                    self.manager?.saveWeight(valueKg: value, date: Date())
+                    self.manager?.fetchTodayWeight()
                 }
             }
         }.resume()
     }
 }
 
-// ---- AESKeyManager ----
-class AESKeyManager {
+//────────────────────── AESKeyManager (CBC) ───────────────
+final class AESKeyManager {
     static let shared = AESKeyManager()
-    private var key: SymmetricKey?
-
-    func setKey(_ data: Data) {
-        key = SymmetricKey(data: data)
-    }
-
-    func decrypt(_ data: Data) -> Data? {
-        guard let key = key else { return nil }
-        do {
-            let sealed = try AES.GCM.SealedBox(combined: data)
-            return try AES.GCM.open(sealed, using: key)
-        } catch {
-            print("Error AES-GCM:", error)
-            return nil
+    private var keyData: Data?                // clave AES binaria
+    
+    func setKey(_ data: Data) { keyData = data }
+    
+    /// Descifra AES-128 CBC con PKCS7:   [IV(16) | ciphertext]
+    func decryptCBC(_ combined: Data) -> Data? {
+        guard combined.count > 16, let keyData else { return nil }
+        
+        let iv         = combined.prefix(16)
+        let ciphertext = combined.dropFirst(16)
+        
+        // buffer de salida (mutable) — +1 bloque por padding
+        let outCapacity = ciphertext.count + kCCBlockSizeAES128
+        var outData     = Data(count: outCapacity)
+        var outLen: size_t = 0
+        
+        let status = outData.withUnsafeMutableBytes { outRaw in
+            keyData.withUnsafeBytes      { keyPtr in
+            iv.withUnsafeBytes           { ivPtr  in
+            ciphertext.withUnsafeBytes   { ctPtr  in
+                CCCrypt(CCOperation(kCCDecrypt),
+                        CCAlgorithm(kCCAlgorithmAES128),
+                        CCOptions(kCCOptionPKCS7Padding),
+                        keyPtr.baseAddress, keyData.count,
+                        ivPtr.baseAddress,
+                        ctPtr.baseAddress, ciphertext.count,
+                        outRaw.baseAddress, outCapacity,
+                        &outLen)
+            }}}
         }
+        
+        guard status == kCCSuccess else {
+            print("❌ CommonCrypto status:", status); return nil
+        }
+        outData.removeSubrange(outLen..<outData.count)   // ajusta longitud real
+        return outData
     }
 }

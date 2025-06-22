@@ -19,17 +19,12 @@ struct HomeView: View {
             }
             .padding(.horizontal)
         }
-        .onAppear{
-            manager.fetchTodaySteps()
-            manager.fetchTodayCalories()
-            manager.fetchTodayWeight()
-        }
-        .onReceive(manager.$isAuthorized){ granted in
-                if granted {
-                    manager.saveWeight(valueKg: 72.5, date: Date())
-                    manager.fetchTodayWeight()
+        .onReceive(manager.$isAuthorized) { granted in
+            if granted {
+                manager.fetchTodaySteps()
+                manager.fetchTodayCalories()
+                manager.fetchTodayWeight()
             }
-            
         }
     }
 }

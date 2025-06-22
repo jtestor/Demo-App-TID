@@ -89,21 +89,26 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(query)
     }
-    func saveWeight(valueKg:Double, date: Date){
+    func saveWeight(valueKg: Double, date: Date) {
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        let type =  HKQuantityType.quantityType(forIdentifier: .bodyMass)!
-        let quantity = HKQuantity(unit: HKUnit.gramUnit(with: .kilo), doubleValue: valueKg)
-        let sample = HKQuantitySample(type: type, quantity: quantity, start: date, end: date)
-        
-        
-        healthStore.save(sample) {success, error in
-            if success{
-                print("weight saved in healthkit")
-            } else {
-                print("error saving todays weight \(String(describing: error))")
+
+        let type      = HKQuantityType.quantityType(forIdentifier: .bodyMass)!
+        let quantity  = HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: valueKg)
+        let sample    = HKQuantitySample(type: type,
+                                         quantity: quantity,
+                                         start: date,
+                                         end:   date)
+
+        healthStore.save(sample) { [weak self] success, error in
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ weight saved in Health-kit")
+                    self?.fetchTodayWeight()          // <-- refresco seguro
+                } else {
+                    print("❌ error saving weight:", error ?? "nil")
+                }
             }
         }
-        
     }
     func fetchTodayWeight() {
         let weightType = HKQuantityType(.bodyMass)

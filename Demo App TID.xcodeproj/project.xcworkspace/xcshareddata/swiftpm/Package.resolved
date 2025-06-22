@@ -1,0 +1,15 @@
+{
+  "originHash" : "95b10adf1cf181758a5f331227f168b9d5f660ad6db6921679f19290c30487a6",
+  "pins" : [
+    {
+      "identity" : "swiftyrsa",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/TakeScoop/SwiftyRSA",
+      "state" : {
+        "revision" : "6521919ad0e99dff927685f142d8136479acb452",
+        "version" : "1.8.0"
+      }
+    }
+  ],
+  "version" : 3
+}

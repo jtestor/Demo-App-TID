@@ -1,5 +1,5 @@
 import SwiftUI
-
+import SwiftyRSA
 @main
 struct Demo_App_TIDApp: App {
 
@@ -12,12 +12,7 @@ struct Demo_App_TIDApp: App {
 
         iotClient = IoTClient(manager: healthManager)
         print("⚙️  IoTClient creado")
-        if let pem = KeyManager.publicKeyPEM() {
-            print("----- CLAVE PÚBLICA PEM -----\n\(pem)")
-        }
-        let base = "https://tid.ngrok.app"
-        print("🔗  Iniciando handshake a \(base)")
-        iotClient.startHandshake(baseURL: base)
+        iotClient.startHandshake()
     }
 
     var body: some Scene {

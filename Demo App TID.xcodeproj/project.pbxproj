@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		49AA8D8F2E0470FE00681563 /* SwiftyRSA in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 49C31C022E046DEA00F634A3 /* SwiftyRSA */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		49C31C032E046DEA00F634A3 /* SwiftyRSA in Frameworks */ = {isa = PBXBuildFile; productRef = 49C31C022E046DEA00F634A3 /* SwiftyRSA */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		497FAAD12DDBFCA300056FC7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -22,6 +27,20 @@
 			remoteInfo = "Demo App TID";
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		49AA8D902E0470FE00681563 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				49AA8D8F2E0470FE00681563 /* SwiftyRSA in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		497FAAC32DDBFCA200056FC7 /* Demo App TID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Demo App TID.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,6 +71,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				49C31C032E046DEA00F634A3 /* SwiftyRSA in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +122,7 @@
 				497FAABF2DDBFCA200056FC7 /* Sources */,
 				497FAAC02DDBFCA200056FC7 /* Frameworks */,
 				497FAAC12DDBFCA200056FC7 /* Resources */,
+				49AA8D902E0470FE00681563 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -112,6 +133,7 @@
 			);
 			name = "Demo App TID";
 			packageProductDependencies = (
+				49C31C022E046DEA00F634A3 /* SwiftyRSA */,
 			);
 			productName = "Demo App TID";
 			productReference = 497FAAC32DDBFCA200056FC7 /* Demo App TID.app */;
@@ -195,6 +217,9 @@
 			);
 			mainGroup = 497FAABA2DDBFCA200056FC7;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				49C31C012E046DEA00F634A3 /* XCRemoteSwiftPackageReference "SwiftyRSA" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 497FAAC42DDBFCA200056FC7 /* Products */;
 			projectDirPath = "";
@@ -564,6 +589,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		49C31C012E046DEA00F634A3 /* XCRemoteSwiftPackageReference "SwiftyRSA" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TakeScoop/SwiftyRSA";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		49C31C022E046DEA00F634A3 /* SwiftyRSA */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 49C31C012E046DEA00F634A3 /* XCRemoteSwiftPackageReference "SwiftyRSA" */;
+			productName = SwiftyRSA;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 497FAABB2DDBFCA200056FC7 /* Project object */;
 }

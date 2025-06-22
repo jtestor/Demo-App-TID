@@ -1,98 +1,83 @@
-//
-//  KeyManager.swift
-//  Demo App TID
-//
-//  Created by Miguel Testor on 16-06-25.
-//
-
 import Foundation
 import Security
 
-/// Maneja la clave privada en el Keychain y expone la clave pública en formato PEM.
+/// Maneja el par RSA en Keychain y exporta la pública en PKIX (BEGIN PUBLIC KEY)
 enum KeyManager {
 
-    // Identificador para ubicar la clave en el Keychain (solo este dispositivo).
+    //–––––––––––––––– Tag Keychain
     private static let tag = "com.demoapptid.privatekey".data(using: .utf8)!
 
-    /// Genera el par RSA (2048 bits) **solo si aún no existe**.
+    // MARK: - Crear par RSA-2048 (una sola vez, permanente)
     static func generateKeyPairIfNeeded() {
-        print("KeyManager: ejecutando generateKeyPairIfNeeded()")
-        guard privateKey() == nil else {
-            print("ya existe una clave privada en el keychain")
-            return }   // ya existen
-        
-        let privateKeyAttrs: [String: Any] = [
-               kSecAttrIsPermanent     as String: true,
-               kSecAttrApplicationTag  as String: tag,
-               kSecAttrAccessible      as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-           ]
+        guard privateKey() == nil else { return }     // ya existe
 
-           let attributes: [String: Any] = [
-               kSecAttrKeyType         as String: kSecAttrKeyTypeRSA,
-               kSecAttrKeySizeInBits   as String: 2048,
-               kSecPrivateKeyAttrs     as String: privateKeyAttrs
-           ]
-        var error : Unmanaged<CFError>?
-        if #available(iOS 15.0, *){
-            guard let priv = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
-                print("error creating private key", error!.takeRetainedValue())
-                return
-            }
-            let pub = SecKeyCopyPublicKey(priv)
-            print(" claves RSA creadas y guardadas en IOs 15+")
-        } else{
-            var pub, priv: SecKey?
-            let status = SecKeyGeneratePair(attributes as CFDictionary, &pub, &priv)
-            if status == errSecSuccess{
-                print("Par de claves RSA creado y guardado (API antigua)")
-            }else {
-                print("error generando claves - status: ", status)
-            }
-        }
+        let privAttrs: [String: Any] = [
+            kSecAttrIsPermanent     as String: true,
+            kSecAttrApplicationTag  as String: tag,
+            kSecAttrAccessible      as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let attrs: [String: Any] = [
+            kSecAttrKeyType       as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: 2048,
+            kSecPrivateKeyAttrs   as String: privAttrs
+        ]
+
+        _ = SecKeyCreateRandomKey(attrs as CFDictionary, nil)
     }
 
-    /// Devuelve la clave privada desde Keychain.
-    static func privateKey() -> SecKey? {
-        let query: [String: Any] = [
-            kSecClass               as String: kSecClassKey,
-            kSecAttrApplicationTag  as String: tag,
-            kSecAttrKeyType         as String: kSecAttrKeyTypeRSA,
-            kSecReturnRef           as String: true
+    // MARK: - Acceso a la clave privada
+    private static func privateKey() -> SecKey? {
+        let q: [String: Any] = [
+            kSecClass              as String: kSecClassKey,
+            kSecAttrApplicationTag as String: tag,
+            kSecAttrKeyType        as String: kSecAttrKeyTypeRSA,
+            kSecReturnRef          as String: true
         ]
         var item: CFTypeRef?
-        return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
-               ? (item as! SecKey)
-               : nil
+        return SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess ? (item as! SecKey) : nil
     }
 
-    /// Exporta la clave **pública** en PEM para entregársela a la Raspberry.
-    static func publicKeyPEM() -> String? {
-        guard let priv = privateKey(),
-              let pub = SecKeyCopyPublicKey(priv),
-              let data = SecKeyCopyExternalRepresentation(pub, nil) as Data? else { return nil }
+    // MARK: - Auxiliar ASN.1 long-form
+    private static func asn1Len(_ n: Int) -> [UInt8] {
+        if n < 128 { return [UInt8(n)] }
+        var len = n, out: [UInt8] = []
+        while len > 0 { out.insert(UInt8(len & 0xFF), at: 0); len >>= 8 }
+        return [0x80 | UInt8(out.count)] + out
+    }
 
-        // Cabecera PEM
-        let b64 = data.base64EncodedString(options: [.lineLength64Characters, .endLineWithLineFeed])
+    // MARK: - Pública BEGIN PUBLIC KEY (PKIX)
+    static func publicKeyPEM_PKIX() -> String? {
+        guard let priv = privateKey(),
+              let pub  = SecKeyCopyPublicKey(priv),
+              let pkcs1 = SecKeyCopyExternalRepresentation(pub, nil) as Data? else { return nil }
+
+        // SubjectPublicKeyInfo = SEQUENCE { AlgorithmID, BIT STRING }
+        let algId: [UInt8] = [                // rsaEncryption + NULL
+            0x30, 0x0D,
+            0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01,
+            0x05, 0x00
+        ]
+        let bitStr  = [0x00] + [UInt8](pkcs1)                       // unused bits = 0
+        let bitSeq  = [0x03] + asn1Len(bitStr.count) + bitStr
+        let spkiSeq = [0x30] + asn1Len(algId.count + bitSeq.count) + algId + bitSeq
+
+        let b64 = Data(spkiSeq)
+            .base64EncodedString(options: [.lineLength64Characters, .endLineWithLineFeed])
+
         return """
         -----BEGIN PUBLIC KEY-----
         \(b64)
         -----END PUBLIC KEY-----
         """
     }
-    //  Desencripta la clave AES cifrada con tu clave pública (RSA-OAEP-SHA256)
+
+    // MARK: - Descifrar AES (RSA-OAEP-SHA256)
     static func decryptAESKey(_ encrypted: Data) -> Data? {
         guard let priv = privateKey() else { return nil }
-        var error: Unmanaged<CFError>?
-        let clear = SecKeyCreateDecryptedData(
-            priv,
-            .rsaEncryptionOAEPSHA256,
-            encrypted as CFData,
-            &error
-        )
-        if clear == nil {
-            print("Error RSA decrypt:", error?.takeRetainedValue().localizedDescription ?? "unknown")
-        }
-        return clear as Data?
+        return SecKeyCreateDecryptedData(priv,
+                                         .rsaEncryptionOAEPSHA256,
+                                         encrypted as CFData,
+                                         nil) as Data?
     }
-
 }
