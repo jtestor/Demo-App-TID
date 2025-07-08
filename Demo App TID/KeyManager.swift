@@ -1,15 +1,21 @@
+//
+//  KeyManager.swift
+//  Demo App TID
+//
+//  Created by Miguel Testor on 19-05-25.
+//
 import Foundation
 import Security
 
-/// Maneja el par RSA en Keychain y exporta la pública en PKIX (BEGIN PUBLIC KEY)
+
 enum KeyManager {
 
     //–––––––––––––––– Tag Keychain
     private static let tag = "com.demoapptid.privatekey".data(using: .utf8)!
 
-    // MARK: - Crear par RSA-2048 (una sola vez, permanente)
+
     static func generateKeyPairIfNeeded() {
-        guard privateKey() == nil else { return }     // ya existe
+        guard privateKey() == nil else { return } 
 
         let privAttrs: [String: Any] = [
             kSecAttrIsPermanent     as String: true,
@@ -26,7 +32,7 @@ enum KeyManager {
         _ = SecKeyCreateRandomKey(attrs as CFDictionary, nil)
     }
 
-    // MARK: - Acceso a la clave privada
+
     private static func privateKey() -> SecKey? {
         let q: [String: Any] = [
             kSecClass              as String: kSecClassKey,
@@ -38,7 +44,7 @@ enum KeyManager {
         return SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess ? (item as! SecKey) : nil
     }
 
-    // MARK: - Auxiliar ASN.1 long-form
+
     private static func asn1Len(_ n: Int) -> [UInt8] {
         if n < 128 { return [UInt8(n)] }
         var len = n, out: [UInt8] = []
@@ -46,19 +52,19 @@ enum KeyManager {
         return [0x80 | UInt8(out.count)] + out
     }
 
-    // MARK: - Pública BEGIN PUBLIC KEY (PKIX)
+
     static func publicKeyPEM_PKIX() -> String? {
         guard let priv = privateKey(),
               let pub  = SecKeyCopyPublicKey(priv),
               let pkcs1 = SecKeyCopyExternalRepresentation(pub, nil) as Data? else { return nil }
 
-        // SubjectPublicKeyInfo = SEQUENCE { AlgorithmID, BIT STRING }
-        let algId: [UInt8] = [                // rsaEncryption + NULL
+   
+        let algId: [UInt8] = [
             0x30, 0x0D,
             0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01,
             0x05, 0x00
         ]
-        let bitStr  = [0x00] + [UInt8](pkcs1)                       // unused bits = 0
+        let bitStr  = [0x00] + [UInt8](pkcs1)                       
         let bitSeq  = [0x03] + asn1Len(bitStr.count) + bitStr
         let spkiSeq = [0x30] + asn1Len(algId.count + bitSeq.count) + algId + bitSeq
 

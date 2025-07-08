@@ -1,6 +1,13 @@
+//
+//  IoTClient.swift
+//  Demo App TID
+//
+//  Created by Miguel Testor on 19-05-25.
+//
+
 import Foundation
-import CommonCrypto                     // ⇦ CBC
-import CryptoKit                        // ⇦ para la clave AES
+import CommonCrypto
+import CryptoKit
 
 //──────────────────────── IoTClient ───────────────────────
 final class IoTClient {
@@ -10,7 +17,7 @@ final class IoTClient {
     
     init(manager: HealthManager) { self.manager = manager }
     
-    // MARK: – 1. Handshake  (POST clave pública)  ──────────
+   
     func startHandshake() {
         guard let pem = KeyManager.publicKeyPEM_PKIX() else { return }
         
@@ -19,10 +26,10 @@ final class IoTClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONEncoder().encode(["public_key": pem])
         
-        print("➡️  POST /handshake bytes=\(req.httpBody?.count ?? 0)")
+        print("  POST /handshake bytes=\(req.httpBody?.count ?? 0)")
         
         URLSession.shared.dataTask(with: req) { data, resp, err in
-            if let err = err { print("❌ NET:", err); return }
+            if let err = err { print(" NET:", err); return }
             guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return }
             self.handleHandshake(data)
         }.resume()
@@ -35,44 +42,44 @@ final class IoTClient {
             let b64  = json["clave_aes"],
             let enc  = Data(base64Encoded: b64),
             let aes  = KeyManager.decryptAESKey(enc)
-        else { print("❌ body handshake"); return }
+        else { print(" body handshake"); return }
         
         AESKeyManager.shared.setKey(aes)
-        print("✅ AES key OK (\(aes.count) bytes)")
+        print(" AES key OK (\(aes.count) bytes)")
         fetchTelemetry()
     }
     
-    // MARK: – 2. GET /telemetria  ──────────────────────────
+    
     private func fetchTelemetry() {
         URLSession.shared.dataTask(with: telemetryURL) { data, resp, err in
-            if let err = err { print("❌ NET telemetry:", err); return }
+            if let err = err { print("NET telemetry:", err); return }
             guard (resp as? HTTPURLResponse)?.statusCode == 200, let data else { return }
             
             // cuerpo crudo para inspección
             if let raw = String(data: data, encoding: .utf8) {
-                print("🔸 RAW /telemetria:", raw)
+                print(" RAW /telemetria:", raw)
             }
             
             guard
                 let json  = try? JSONSerialization.jsonObject(with: data) as? [String:String],
                 let b64   = json["data"],
                 let cipher = Data(base64Encoded: b64)
-            else { print("❌ JSON sin 'data'"); return }
+            else { print(" JSON sin 'data'"); return }
             
-            print("📦 bytes cifrados:", cipher.count)
+            print(" bytes cifrados:", cipher.count)
             
-            // --- CBC decrypt (IV + ciphertext) ------------
+         
             guard let clear = AESKeyManager.shared.decryptCBC(cipher) else {
-                print("❌ AES-CBC decrypt falló"); return
+                print(" AES-CBC decrypt falló"); return
             }
             
             guard
                 let obj    = try? JSONSerialization.jsonObject(with: clear) as? [String:Any],
                 let type   = obj["type"]  as? String,
                 let value  = obj["value"] as? Double
-            else { print("❌ JSON claro inválido"); return }
+            else { print(" JSON claro inválido"); return }
             
-            print("✅ Telemetría:", obj)
+            print("Telemetría:", obj)
             
             if type == "weight" {
                 DispatchQueue.main.async {
@@ -84,21 +91,21 @@ final class IoTClient {
     }
 }
 
-//────────────────────── AESKeyManager (CBC) ───────────────
+
 final class AESKeyManager {
     static let shared = AESKeyManager()
-    private var keyData: Data?                // clave AES binaria
+    private var keyData: Data?
     
     func setKey(_ data: Data) { keyData = data }
     
-    /// Descifra AES-128 CBC con PKCS7:   [IV(16) | ciphertext]
+    
     func decryptCBC(_ combined: Data) -> Data? {
         guard combined.count > 16, let keyData else { return nil }
         
         let iv         = combined.prefix(16)
         let ciphertext = combined.dropFirst(16)
         
-        // buffer de salida (mutable) — +1 bloque por padding
+
         let outCapacity = ciphertext.count + kCCBlockSizeAES128
         var outData     = Data(count: outCapacity)
         var outLen: size_t = 0
@@ -119,9 +126,9 @@ final class AESKeyManager {
         }
         
         guard status == kCCSuccess else {
-            print("❌ CommonCrypto status:", status); return nil
+            print(" CommonCrypto status:", status); return nil
         }
-        outData.removeSubrange(outLen..<outData.count)   // ajusta longitud real
+        outData.removeSubrange(outLen..<outData.count)   
         return outData
     }
 }

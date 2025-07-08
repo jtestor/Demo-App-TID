@@ -102,10 +102,10 @@ class HealthManager: ObservableObject {
         healthStore.save(sample) { [weak self] success, error in
             DispatchQueue.main.async {
                 if success {
-                    print("✅ weight saved in Health-kit")
+                    print("weight saved in Health-kit")
                     self?.fetchTodayWeight()          // <-- refresco seguro
                 } else {
-                    print("❌ error saving weight:", error ?? "nil")
+                    print("error saving weight:", error ?? "nil")
                 }
             }
         }
